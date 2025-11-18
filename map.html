@@ -8,22 +8,18 @@
   <style>
     body { margin:0 }
     #map { height: 100vh; }
-    /* 방위표기(우측 상단) 간단 컴퍼스 스타일 */
+
+    /* 좌측 상단 레이어 컨트롤 기본 스타일 유지 */
+
+    /* 우측 상단: 방위(컴퍼스) – 아이콘을 작게(기존의 1/2) */
     .leaflet-control.compass.leaflet-bar {
-      background:#fff; border:1px solid #ccc; border-radius:4px;
-      padding:6px 8px; box-shadow:0 1px 3px rgba(0,0,0,.15); font:12px/1.2 system-ui;
+      background:#fff; border:1px solid #ccc; border-radius:6px;
+      padding:4px 6px; box-shadow:0 1px 3px rgba(0,0,0,.15); font:12px/1.2 system-ui;
     }
-    .compass .rose {
-      position:relative; width:60px; height:60px; border:1px solid #aaa; border-radius:50%;
-      display:flex; align-items:center; justify-content:center;
+    .compass .arrow-wrap {
+      width:30px; height:30px; display:flex; align-items:center; justify-content:center;
     }
-    .compass .needle { position:absolute; width:2px; height:44px; background:#d00; top:8px; left:50%;
-      transform:translateX(-50%); border-radius:1px; }
-    .compass .n,.compass .e,.compass .s,.compass .w { position:absolute; font-weight:700; color:#333; }
-    .compass .n{ top:2px; left:50%; transform:translateX(-50%); }
-    .compass .s{ bottom:2px; left:50%; transform:translateX(-50%); }
-    .compass .e{ right:2px; top:50%; transform:translateY(-50%); }
-    .compass .w{ left:2px; top:50%; transform:translateY(-50%); }
+    .compass .label { text-align:center; font-weight:700; color:#333; font-size:10px; margin-top:2px; }
   </style>
 </head>
 <body>
@@ -40,33 +36,27 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F"; // ← 발급받은 VWorld 키로 교체
+    const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F";              // ← VWorld 키
+    const COMPASS_RGB = "18, 52, 102";          // ← 방위 화살표 색상 (남색계열). 원하는 RGB로만 바꾸면 됨.
 
     // 지도 생성 (제주특별자치도청 중심)
     const map = L.map('map', { zoomControl: true }).setView([33.4890, 126.4983], 13);
 
-    // ----- 베이스 타일 정의 -----
+    // ----- 베이스맵 -----
     const street = L.tileLayer(
       `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Base/{z}/{y}/{x}.png`,
       { maxZoom: 19, attribution: '&copy; VWorld' }
     );
-
     const satellite = L.tileLayer(
       `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Satellite/{z}/{y}/{x}.jpeg`,
       { maxZoom: 19, attribution: '&copy; VWorld' }
     );
-
-    // 기본은 '일반(street)'로 표시
     street.addTo(map);
 
-    // ----- 레이어 선택(좌측 상단) -----
-    const baseMaps = {
-      '일반': street,
-      '위성': satellite
-    };
-    L.control.layers(baseMaps, {}, { position: 'topleft', collapsed: false }).addTo(map);
+    // ----- 레이어 선택(좌측 상단) : 일반 / 위성 -----
+    L.control.layers({ '일반': street, '위성': satellite }, {}, { position:'topleft', collapsed:false }).addTo(map);
 
-    // ----- 방위 표기(우측 상단) -----
+    // ----- 방위(우측 상단) : 1/2 크기, 화살표 아이콘, RGB 색상 적용 -----
     const CompassControl = L.Control.extend({
       options: { position: 'topright' },
       onAdd: function () {
