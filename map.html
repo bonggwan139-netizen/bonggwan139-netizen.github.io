@@ -6,12 +6,28 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
-    #map { height: calc(100vh - 64px); } /* 헤더 제외 꽉 채우기 */
-    a { color:#0366d6; }
+    body { margin:0 }
+    #map { height: 100vh; }
+    /* 방위표기(우측 상단) 간단 컴퍼스 스타일 */
+    .leaflet-control.compass.leaflet-bar {
+      background:#fff; border:1px solid #ccc; border-radius:4px;
+      padding:6px 8px; box-shadow:0 1px 3px rgba(0,0,0,.15); font:12px/1.2 system-ui;
+    }
+    .compass .rose {
+      position:relative; width:60px; height:60px; border:1px solid #aaa; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .compass .needle { position:absolute; width:2px; height:44px; background:#d00; top:8px; left:50%;
+      transform:translateX(-50%); border-radius:1px; }
+    .compass .n,.compass .e,.compass .s,.compass .w { position:absolute; font-weight:700; color:#333; }
+    .compass .n{ top:2px; left:50%; transform:translateX(-50%); }
+    .compass .s{ bottom:2px; left:50%; transform:translateX(-50%); }
+    .compass .e{ right:2px; top:50%; transform:translateY(-50%); }
+    .compass .w{ left:2px; top:50%; transform:translateY(-50%); }
   </style>
 </head>
 <body>
-  <header style="border-bottom:1px solid #eee; position:sticky; top:0; background:#fff;">
+  <header style="border-bottom:1px solid #eee; position:sticky; top:0; background:#fff; z-index:1000;">
     <nav style="max-width:1000px; margin:0 auto; padding:14px 20px; display:flex; gap:16px; align-items:center;">
       <strong style="font-size:18px;">DBC</strong>
       <a href="index.html">홈</a>
@@ -24,15 +40,57 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F"; // ← 발급받은 키로 교체
-    const map = L.map('map').setView([33.4890, 126.4983], 13);
+    const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F"; // ← 발급받은 VWorld 키로 교체
 
-    L.tileLayer(
+    // 지도 생성 (제주특별자치도청 중심)
+    const map = L.map('map', { zoomControl: true }).setView([33.4890, 126.4983], 13);
+
+    // ----- 베이스 타일 정의 -----
+    const street = L.tileLayer(
       `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Base/{z}/{y}/{x}.png`,
       { maxZoom: 19, attribution: '&copy; VWorld' }
-    ).addTo(map);
+    );
 
-    // 테스트 마커
+    const satellite = L.tileLayer(
+      `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Satellite/{z}/{y}/{x}.jpeg`,
+      { maxZoom: 19, attribution: '&copy; VWorld' }
+    );
+
+    // 기본은 '일반(street)'로 표시
+    street.addTo(map);
+
+    // ----- 레이어 선택(좌측 상단) -----
+    const baseMaps = {
+      '일반': street,
+      '위성': satellite
+    };
+    L.control.layers(baseMaps, {}, { position: 'topleft', collapsed: false }).addTo(map);
+
+    // ----- 방위 표기(우측 상단) -----
+    const CompassControl = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        const container = L.DomUtil.create('div', 'leaflet-control compass leaflet-bar');
+        container.innerHTML = `
+          <div class="rose">
+            <div class="needle"></div>
+            <div class="n">N</div>
+            <div class="e">E</div>
+            <div class="s">S</div>
+            <div class="w">W</div>
+          </div>`;
+        // 드래그/줌 방해 방지
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+        return container;
+      }
+    });
+    map.addControl(new CompassControl());
+
+    // ----- 축척(우측 하단, 미터 단위) -----
+    L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
+
+    // 테스트 마커: 제주특별자치도청
     L.marker([33.4890, 126.4983]).addTo(map).bindPopup("제주특별자치도청").openPopup();
   </script>
 </body>
