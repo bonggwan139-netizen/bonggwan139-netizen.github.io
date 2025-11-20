@@ -51,6 +51,7 @@
     const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F";  // VWorld 키
     const COMPASS_RGB = "18, 52, 102";                    // 방위 화살표 색
     const API_BASE_URL = "http://127.0.0.1:8000";         // FastAPI 서버 주소
+    const PARCEL_ZOOM_THRESHOLD = 16;
 
     // 지도 생성 (제주특별자치도청 중심)
     const map = L.map('map', { zoomControl: true }).setView([33.4890, 126.4983], 13);
@@ -116,11 +117,15 @@
     }).addTo(map);
 
     async function loadParcelsInView() {
-      const zoom = map.getZoom();
+  const zoom = map.getZoom();
 
-      // 너무 멀리서 보면 로딩 안 함 (서버 보호용)
-      if (zoom < 14) {
-        parcelLayer.clearLayers();
+  // 🔸 특정 줌 이상일 때만 필지 보이게 (한 번에 나타나는 느낌)
+  if (zoom < PARCEL_ZOOM_THRESHOLD) {
+    parcelLayer.clearLayers();
+    return;
+  }
+
+  const bounds = map.getBounds();
         return;
       }
 
