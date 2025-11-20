@@ -47,122 +47,114 @@
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-  const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F";  // VWorld 키
-  const COMPASS_RGB = "18, 52, 102";
-  const API_BASE_URL = "http://127.0.0.1:8000";        // FastAPI 서버 (로컬)
+  <script>
+    const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F";  // VWorld 키
+    const COMPASS_RGB = "18, 52, 102";                    // 방위 화살표 색
+    const API_BASE_URL = "http://127.0.0.1:8000";         // FastAPI 서버 주소
 
-  // 지도 생성 (제주특별자치도청 중심)
-  const map = L.map('map', { zoomControl: true }).setView([33.4890, 126.4983], 13);
+    // 지도 생성 (제주특별자치도청 중심)
+    const map = L.map('map', { zoomControl: true }).setView([33.4890, 126.4983], 13);
 
-  // ----- 베이스맵 -----
-  const street = L.tileLayer(
-    `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Base/{z}/{y}/{x}.png`,
-    { maxZoom: 19, attribution: '&copy; VWorld' }
-  );
-  const satellite = L.tileLayer(
-    `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Satellite/{z}/{y}/{x}.jpeg`,
-    { maxZoom: 19, attribution: '&copy; VWorld' }
-  );
-  street.addTo(map);
+    // ----- 베이스맵 -----
+    const street = L.tileLayer(
+      `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Base/{z}/{y}/{x}.png`,
+      { maxZoom: 19, attribution: '&copy; VWorld' }
+    );
+    const satellite = L.tileLayer(
+      `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Satellite/{z}/{y}/{x}.jpeg`,
+      { maxZoom: 19, attribution: '&copy; VWorld' }
+    );
+    street.addTo(map);
 
-  // ----- 레이어 선택(좌측 상단) : 일반 / 위성 -----
-  L.control.layers({ '일반': street, '위성': satellite }, {}, { position:'topleft', collapsed:false }).addTo(map);
+    // ----- 레이어 선택(좌측 상단) : 일반 / 위성 -----
+    L.control.layers({ '일반': street, '위성': satellite }, {}, { position:'topleft', collapsed:false }).addTo(map);
 
-  // ----- 방위(우측 상단) -----
-  const CompassControl = L.Control.extend({
-    options: { position: 'topright' },
-    onAdd: function () {
-      const container = L.DomUtil.create('div', 'leaflet-control compass leaflet-bar');
-      container.innerHTML = `
-        <div class="arrow-wrap">
-          <svg width="30" height="30" viewBox="0 0 30 30" aria-label="north">
-            <polygon points="15,2 26,26 15,21 4,26" fill="rgb(${COMPASS_RGB})"></polygon>
-          </svg>
-        </div>
-        <div class="label">N</div>
-      `;
-      L.DomEvent.disableClickPropagation(container);
-      L.DomEvent.disableScrollPropagation(container);
-      return container;
-    }
-  });
-  map.addControl(new CompassControl());
-
-  // ----- 축척(우측 하단, 미터 단위) -----
-  L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
-
-  // ====== 🔽 여기부터 필지(PNU) API 연동 코드 ======
-
-  // 필지 표시용 GeoJSON 레이어
-  const parcelLayer = L.geoJSON(null, {
-    style: {
-      color: '#ff0000',
-      weight: 2,
-      fillOpacity: 0.2
-    },
-    onEachFeature: (feature, layer) => {
-      if (feature.properties) {
-        const p = feature.properties;
-        layer.bindPopup(`
-          <div style="font-size:12px;">
-            <div><b>PNU</b>: ${p.pnu}</div>
-            <div><b>주소</b>: ${p.address ?? ''}</div>
-            <div><b>지목</b>: ${p.jimok_nm ?? ''}</div>
-            <div><b>면적(㎡)</b>: ${p.area_m2 ?? ''}</div>
-            <div><b>공시지가</b>: ${p.land_price ?? ''}</div>
+    // ----- 방위(우측 상단) -----
+    const CompassControl = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        const container = L.DomUtil.create('div', 'leaflet-control compass leaflet-bar');
+        container.innerHTML = `
+          <div class="arrow-wrap">
+            <svg width="30" height="30" viewBox="0 0 30 30" aria-label="north">
+              <polygon points="15,2 26,26 15,21 4,26" fill="rgb(${COMPASS_RGB})"></polygon>
+            </svg>
           </div>
-        `);
+          <div class="label">N</div>
+        `;
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+        return container;
       }
-    }
-  }).addTo(map);
+    });
+    map.addControl(new CompassControl());
 
-  async function loadParcelByPnu(pnu) {
-    if (!pnu) {
-      alert("PNU를 입력해 주세요.");
-      return;
-    }
+    // ----- 축척(우측 하단, 미터 단위) -----
+    L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/parcel/${encodeURIComponent(pnu)}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          alert("해당 PNU 필지를 찾을 수 없습니다.");
-        } else {
-          alert("서버 오류가 발생했습니다: " + res.status);
+    // ====== 여기서부터 BBOX 안 필지 자동 로딩 ======
+    const parcelLayer = L.geoJSON(null, {
+      style: {
+        color: '#ff0000',
+        weight: 2,
+        fillOpacity: 0.2
+      },
+      onEachFeature: (feature, layer) => {
+        if (feature.properties) {
+          const p = feature.properties;
+          layer.bindPopup(
+            `<div style="font-size:12px;">
+              <div><b>PNU</b>: ${p.pnu}</div>
+              <div><b>주소</b>: ${p.address ?? ''}</div>
+              <div><b>지목</b>: ${p.jimok_nm ?? ''}</div>
+              <div><b>면적(㎡)</b>: ${p.area_m2 ?? ''}</div>
+              <div><b>공시지가</b>: ${p.land_price ?? ''}</div>
+            </div>`
+          );
         }
+      }
+    }).addTo(map);
+
+    async function loadParcelsInView() {
+      const zoom = map.getZoom();
+
+      // 너무 멀리서 보면 로딩 안 함 (서버 보호용)
+      if (zoom < 14) {
+        parcelLayer.clearLayers();
         return;
       }
 
-      const feature = await res.json();
+      const bounds = map.getBounds();
+      const min_lon = bounds.getWest();
+      const min_lat = bounds.getSouth();
+      const max_lon = bounds.getEast();
+      const max_lat = bounds.getNorth();
 
-      // 이전 필지 지우고 새로 그림
-      parcelLayer.clearLayers();
-      parcelLayer.addData(feature);
+      const url = `${API_BASE_URL}/parcels_bbox` +
+                  `?min_lon=${min_lon}&min_lat=${min_lat}` +
+                  `&max_lon=${max_lon}&max_lat=${max_lat}` +
+                  `&limit=500`;
 
-      const bounds = parcelLayer.getBounds();
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { maxZoom: 18 });
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.error("bbox 요청 실패:", res.status);
+          return;
+        }
+
+        const fc = await res.json();   // FeatureCollection
+        parcelLayer.clearLayers();
+        parcelLayer.addData(fc);       // 여러 필지를 한 번에 그림
+      } catch (err) {
+        console.error("bbox 요청 중 오류:", err);
       }
-    } catch (err) {
-      console.error(err);
-      alert("API 요청 중 오류가 발생했습니다. 콘솔을 확인하세요.");
     }
-  }
 
-  // 검색창 이벤트 연결
-  const pnuInput = document.getElementById("pnu-input");
-  const pnuBtn = document.getElementById("pnu-btn");
+    // 지도 이동/확대 끝날 때마다 현재 화면 범위 필지 로딩
+    map.on("moveend", loadParcelsInView);
 
-  pnuBtn.addEventListener("click", () => {
-    loadParcelByPnu(pnuInput.value.trim());
-  });
-
-  pnuInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      loadParcelByPnu(pnuInput.value.trim());
-    }
-  });
-</script>
+    // 맵 처음 로딩될 때도 한 번 호출
+    map.whenReady(loadParcelsInView);
+  </script>
 </body>
 </html>
