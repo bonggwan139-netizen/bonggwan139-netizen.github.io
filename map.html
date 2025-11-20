@@ -215,6 +215,7 @@
       }
 
       const fc = await res.json();   // FeatureCollection
+      console.log("이번 BBOX 필지 개수:", fc.features.length);
 
       // 기존 것 지우고 새로 그림 (선택 상태도 초기화)
       parcelLayer.clearLayers();
