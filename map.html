@@ -234,5 +234,39 @@
   // 맵 처음 로딩될 때도 한 번 호출
   map.whenReady(loadParcelsInView);
 </script>
+
+  <script>
+  // GitHub Pages에 올라간 벡터 타일 URL
+  const PARCEL_TILE_URL =
+    "https://bonggwan139-netizen.github.io/jeju_tiles/{z}/{x}/{y}.pbf";
+
+  // tippecanoe에서 --layer=parcels 로 만들었음
+  const parcelTiles = L.vectorGrid.protobuf(PARCEL_TILE_URL, {
+    maxZoom: 14,
+    minZoom: 0,
+    vectorTileLayerStyles: {
+      parcels: function (props, zoom) {
+        return {
+          color: "#ff0000",
+          weight: 0.5,
+          fill: false
+        };
+      }
+    },
+    interactive: true
+  }).addTo(map);
+
+  // 클릭하면 PNU 팝업
+  parcelTiles.on("click", function (e) {
+    const pnu = e.layer.properties?.pnu;
+    if (pnu) {
+      L.popup()
+        .setLatLng(e.latlng)
+        .setContent("<b>PNU:</b> " + pnu)
+        .openOn(map);
+    }
+  });
+</script>
+  
 </body>
 </html>
