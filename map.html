@@ -47,119 +47,179 @@
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F";  // VWorld 키
-    const COMPASS_RGB = "18, 52, 102";                    // 방위 화살표 색
-    const API_BASE_URL = "http://127.0.0.1:8000";         // FastAPI 서버 주소
-    const PARCEL_ZOOM_THRESHOLD = 14;
+<script>
+  const KEY = "3C11E290-3F00-3957-8B03-FB4CB582692F";  // VWorld 키
+  const COMPASS_RGB = "18, 52, 102";                    // 방위 화살표 색
+  const API_BASE_URL = "http://127.0.0.1:8000";         // FastAPI 서버 주소
+  const PARCEL_ZOOM_THRESHOLD = 16;                     // 이 줌 이상일 때만 필지 표시
 
-    // 지도 생성 (제주특별자치도청 중심)
-    const map = L.map('map', { zoomControl: true }).setView([33.4890, 126.4983], 13);
+  // 지도 생성 (제주특별자치도청 중심)
+  const map = L.map('map', { zoomControl: true }).setView([33.4890, 126.4983], 13);
 
-    // ----- 베이스맵 -----
-    const street = L.tileLayer(
-      `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Base/{z}/{y}/{x}.png`,
-      { maxZoom: 19, attribution: '&copy; VWorld' }
-    );
-    const satellite = L.tileLayer(
-      `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Satellite/{z}/{y}/{x}.jpeg`,
-      { maxZoom: 19, attribution: '&copy; VWorld' }
-    );
-    street.addTo(map);
+  // ----- 베이스맵 -----
+  const street = L.tileLayer(
+    `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Base/{z}/{y}/{x}.png`,
+    { maxZoom: 19, attribution: '&copy; VWorld' }
+  );
+  const satellite = L.tileLayer(
+    `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Satellite/{z}/{y}/{x}.jpeg`,
+    { maxZoom: 19, attribution: '&copy; VWorld' }
+  );
+  street.addTo(map);
 
-    // ----- 레이어 선택(좌측 상단) : 일반 / 위성 -----
-    L.control.layers({ '일반': street, '위성': satellite }, {}, { position:'topleft', collapsed:false }).addTo(map);
+  // 레이어 선택(좌측 상단)
+  const baseLayers = { '일반': street, '위성': satellite };
+  L.control.layers(baseLayers, {}, { position:'topleft', collapsed:false }).addTo(map);
 
-    // ----- 방위(우측 상단) -----
-    const CompassControl = L.Control.extend({
-      options: { position: 'topright' },
-      onAdd: function () {
-        const container = L.DomUtil.create('div', 'leaflet-control compass leaflet-bar');
-        container.innerHTML = `
-          <div class="arrow-wrap">
-            <svg width="30" height="30" viewBox="0 0 30 30" aria-label="north">
-              <polygon points="15,2 26,26 15,21 4,26" fill="rgb(${COMPASS_RGB})"></polygon>
-            </svg>
-          </div>
-          <div class="label">N</div>
-        `;
-        L.DomEvent.disableClickPropagation(container);
-        L.DomEvent.disableScrollPropagation(container);
-        return container;
+  // 현재 베이스맵 상태 추적 (기본: 일반)
+  let currentBase = 'street';
+
+  map.on('baselayerchange', (e) => {
+    if (e.name === '위성') {
+      currentBase = 'satellite';
+    } else {
+      currentBase = 'street';
+    }
+
+    // 베이스맵 바뀔 때, 선택되지 않은 폴리곤들의 선 색 재적용
+    parcelLayer.eachLayer(layer => {
+      if (layer !== selectedLayer) {
+        resetParcelStyle(layer);
       }
     });
-    map.addControl(new CompassControl());
+  });
 
-    // ----- 축척(우측 하단, 미터 단위) -----
-    L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
+  // ----- 방위(우측 상단) -----
+  const CompassControl = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd: function () {
+      const container = L.DomUtil.create('div', 'leaflet-control compass leaflet-bar');
+      container.innerHTML = `
+        <div class="arrow-wrap">
+          <svg width="30" height="30" viewBox="0 0 30 30" aria-label="north">
+            <polygon points="15,2 26,26 15,21 4,26" fill="rgb(${COMPASS_RGB})"></polygon>
+          </svg>
+        </div>
+        <div class="label">N</div>
+      `;
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      return container;
+    }
+  });
+  map.addControl(new CompassControl());
 
-    // ====== 여기서부터 BBOX 안 필지 자동 로딩 ======
-    const parcelLayer = L.geoJSON(null, {
-      style: {
-        color: '#ff0000',
-        weight: 2,
-        fillOpacity: 0.2
-      },
-      onEachFeature: (feature, layer) => {
-        if (feature.properties) {
-          const p = feature.properties;
-          layer.bindPopup(
-            `<div style="font-size:12px;">
-              <div><b>PNU</b>: ${p.pnu}</div>
-              <div><b>주소</b>: ${p.address ?? ''}</div>
-              <div><b>지목</b>: ${p.jimok_nm ?? ''}</div>
-              <div><b>면적(㎡)</b>: ${p.area_m2 ?? ''}</div>
-              <div><b>공시지가</b>: ${p.land_price ?? ''}</div>
-            </div>`
-          );
-        }
-      }
-    }).addTo(map);
+  // ----- 축척(우측 하단, 미터 단위) -----
+  L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
 
-    async function loadParcelsInView() {
-  const zoom = map.getZoom();
+  // ====== 필지 스타일 관련 설정 ======
 
-  // 🔸 특정 줌 이상일 때만 필지 보이게 (한 번에 나타나는 느낌)
-  if (zoom < PARCEL_ZOOM_THRESHOLD) {
-    parcelLayer.clearLayers();
-    return;
+  // 선택된 레이어 기억용
+  let selectedLayer = null;
+
+  // 기본 스타일: 베이스맵에 따라 선 색만 다르고, 안은 투명
+  function defaultParcelStyle() {
+    const isSatellite = currentBase === 'satellite';
+    return {
+      color: isSatellite ? '#ffffff' : '#666666',  // 위성=흰색, 일반=회색
+      weight: 1,                                   // 얇은 선
+      fillOpacity: 0,                              // 내부 투명
+      fillColor: '#ffffff'                         // 의미 없음 (투명이라)
+    };
   }
 
-  const bounds = map.getBounds();
+  function resetParcelStyle(layer) {
+    layer.setStyle(defaultParcelStyle());
+  }
+
+  function selectParcel(layer) {
+    // 이전 선택이 있으면 원래 스타일로 돌리기
+    if (selectedLayer && selectedLayer !== layer) {
+      resetParcelStyle(selectedLayer);
+    }
+
+    selectedLayer = layer;
+
+    // 선택 스타일: 빨간 선 + 조금 두꺼운 선 + 투명한 빨간 채움
+    layer.setStyle({
+      color: '#ff0000',
+      weight: 2,           // 기본보다 두껍게
+      fillColor: '#ff0000',
+      fillOpacity: 0.3
+    });
+
+    layer.bringToFront();
+  }
+
+  // ====== 필지 레이어 (BBOX + 클릭 시 선택) ======
+  const parcelLayer = L.geoJSON(null, {
+    style: () => defaultParcelStyle(),
+    onEachFeature: (feature, layer) => {
+      // 클릭했을 때 선택 스타일 적용
+      layer.on('click', () => {
+        selectParcel(layer);
+      });
+
+      if (feature.properties) {
+        const p = feature.properties;
+        layer.bindPopup(
+          `<div style="font-size:12px;">
+            <div><b>PNU</b>: ${p.pnu}</div>
+            <div><b>주소</b>: ${p.address ?? ''}</div>
+            <div><b>지목</b>: ${p.jimok_nm ?? ''}</div>
+            <div><b>면적(㎡)</b>: ${p.area_m2 ?? ''}</div>
+            <div><b>공시지가</b>: ${p.land_price ?? ''}</div>
+          </div>`
+        );
+      }
+    }
+  }).addTo(map);
+
+  // ====== 현재 화면(BBOX) 안 필지 로딩 ======
+  async function loadParcelsInView() {
+    const zoom = map.getZoom();
+
+    // 특정 줌 이상일 때만 필지 표시 (한 번에 나타나는 느낌)
+    if (zoom < PARCEL_ZOOM_THRESHOLD) {
+      parcelLayer.clearLayers();
+      selectedLayer = null;
+      return;
+    }
+
+    const bounds = map.getBounds();
+    const min_lon = bounds.getWest();
+    const min_lat = bounds.getSouth();
+    const max_lon = bounds.getEast();
+    const max_lat = bounds.getNorth();
+
+    const url = `${API_BASE_URL}/parcels_bbox` +
+                `?min_lon=${min_lon}&min_lat=${min_lat}` +
+                `&max_lon=${max_lon}&max_lat=${max_lat}` +
+                `&limit=500`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error("bbox 요청 실패:", res.status);
         return;
       }
 
-      const bounds = map.getBounds();
-      const min_lon = bounds.getWest();
-      const min_lat = bounds.getSouth();
-      const max_lon = bounds.getEast();
-      const max_lat = bounds.getNorth();
+      const fc = await res.json();   // FeatureCollection
 
-      const url = `${API_BASE_URL}/parcels_bbox` +
-                  `?min_lon=${min_lon}&min_lat=${min_lat}` +
-                  `&max_lon=${max_lon}&max_lat=${max_lat}` +
-                  `&limit=500`;
-
-      try {
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.error("bbox 요청 실패:", res.status);
-          return;
-        }
-
-        const fc = await res.json();   // FeatureCollection
-        parcelLayer.clearLayers();
-        parcelLayer.addData(fc);       // 여러 필지를 한 번에 그림
-      } catch (err) {
-        console.error("bbox 요청 중 오류:", err);
-      }
+      // 기존 것 지우고 새로 그림 (선택 상태도 초기화)
+      parcelLayer.clearLayers();
+      selectedLayer = null;
+      parcelLayer.addData(fc);
+    } catch (err) {
+      console.error("bbox 요청 중 오류:", err);
     }
+  }
 
-    // 지도 이동/확대 끝날 때마다 현재 화면 범위 필지 로딩
-    map.on("moveend", loadParcelsInView);
+  // 지도 이동/확대 끝날 때마다 현재 화면 범위 필지 로딩
+  map.on("moveend", loadParcelsInView);
 
-    // 맵 처음 로딩될 때도 한 번 호출
-    map.whenReady(loadParcelsInView);
-  </script>
+  // 맵 처음 로딩될 때도 한 번 호출
+  map.whenReady(loadParcelsInView);
+</script>
 </body>
 </html>
