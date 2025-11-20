@@ -58,31 +58,31 @@
 
   // ----- 베이스맵 -----
   const street = L.tileLayer(
-    `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Base/{z}/{y}/{x}.png`,
-    { maxZoom: 19, attribution: '&copy; VWorld' }
+    "https://api.vworld.kr/req/wmts/1.0.0/" + KEY + "/Base/{z}/{y}/{x}.png",
+    { maxZoom: 19, attribution: "&copy; VWorld" }
   );
   const satellite = L.tileLayer(
-    `https://api.vworld.kr/req/wmts/1.0.0/${KEY}/Satellite/{z}/{y}/{x}.jpeg`,
-    { maxZoom: 19, attribution: '&copy; VWorld' }
+    "https://api.vworld.kr/req/wmts/1.0.0/" + KEY + "/Satellite/{z}/{y}/{x}.jpeg",
+    { maxZoom: 19, attribution: "&copy; VWorld" }
   );
   street.addTo(map);
 
   // 레이어 선택(좌측 상단)
-  const baseLayers = { '일반': street, '위성': satellite };
-  L.control.layers(baseLayers, {}, { position:'topleft', collapsed:false }).addTo(map);
+  const baseLayers = { "일반": street, "위성": satellite };
+  L.control.layers(baseLayers, {}, { position:"topleft", collapsed:false }).addTo(map);
 
   // 현재 베이스맵 상태 추적 (기본: 일반)
-  let currentBase = 'street';
+  let currentBase = "street";
 
-  map.on('baselayerchange', (e) => {
-    if (e.name === '위성') {
-      currentBase = 'satellite';
+  map.on("baselayerchange", function (e) {
+    if (e.name === "위성") {
+      currentBase = "satellite";
     } else {
-      currentBase = 'street';
+      currentBase = "street";
     }
 
     // 베이스맵 바뀔 때, 선택되지 않은 폴리곤들의 선 색 재적용
-    parcelLayer.eachLayer(layer => {
+    parcelLayer.eachLayer(function (layer) {
       if (layer !== selectedLayer) {
         resetParcelStyle(layer);
       }
@@ -91,17 +91,16 @@
 
   // ----- 방위(우측 상단) -----
   const CompassControl = L.Control.extend({
-    options: { position: 'topright' },
+    options: { position: "topright" },
     onAdd: function () {
-      const container = L.DomUtil.create('div', 'leaflet-control compass leaflet-bar');
-      container.innerHTML = `
-        <div class="arrow-wrap">
-          <svg width="30" height="30" viewBox="0 0 30 30" aria-label="north">
-            <polygon points="15,2 26,26 15,21 4,26" fill="rgb(${COMPASS_RGB})"></polygon>
-          </svg>
-        </div>
-        <div class="label">N</div>
-      `;
+      const container = L.DomUtil.create("div", "leaflet-control compass leaflet-bar");
+      container.innerHTML =
+        '<div class="arrow-wrap">' +
+          '<svg width="30" height="30" viewBox="0 0 30 30" aria-label="north">' +
+            '<polygon points="15,2 26,26 15,21 4,26" fill="rgb(' + COMPASS_RGB + ')"></polygon>' +
+          "</svg>" +
+        "</div>" +
+        '<div class="label">N</div>';
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
       return container;
@@ -110,7 +109,7 @@
   map.addControl(new CompassControl());
 
   // ----- 축척(우측 하단, 미터 단위) -----
-  L.control.scale({ position: 'bottomright', metric: true, imperial: false }).addTo(map);
+  L.control.scale({ position: "bottomright", metric: true, imperial: false }).addTo(map);
 
   // ====== 필지 스타일 관련 설정 ======
 
@@ -119,12 +118,12 @@
 
   // 기본 스타일: 베이스맵에 따라 선 색만 다르고, 안은 투명
   function defaultParcelStyle() {
-    const isSatellite = currentBase === 'satellite';
+    const isSatellite = currentBase === "satellite";
     return {
-      color: isSatellite ? '#ffffff' : '#666666',  // 위성=흰색, 일반=회색
+      color: isSatellite ? "#ffffff" : "#666666",  // 위성=흰색, 일반=회색
       weight: 1,                                   // 얇은 선
       fillOpacity: 0,                              // 내부 투명
-      fillColor: '#ffffff'                         // 의미 없음 (투명이라)
+      fillColor: "#ffffff"                         // 의미 없음 (투명이라)
     };
   }
 
@@ -142,9 +141,9 @@
 
     // 선택 스타일: 빨간 선 + 조금 두꺼운 선 + 투명한 빨간 채움
     layer.setStyle({
-      color: '#ff0000',
+      color: "#ff0000",
       weight: 2,           // 기본보다 두껍게
-      fillColor: '#ff0000',
+      fillColor: "#ff0000",
       fillOpacity: 0.3
     });
 
@@ -153,23 +152,30 @@
 
   // ====== 필지 레이어 (BBOX + 클릭 시 선택) ======
   const parcelLayer = L.geoJSON(null, {
-    style: () => defaultParcelStyle(),
-    onEachFeature: (feature, layer) => {
+    style: function () {
+      return defaultParcelStyle();
+    },
+    onEachFeature: function (feature, layer) {
       // 클릭했을 때 선택 스타일 적용
-      layer.on('click', () => {
+      layer.on("click", function () {
         selectParcel(layer);
       });
 
       if (feature.properties) {
         const p = feature.properties;
+        const addr = p.address || "";
+        const jm = p.jimok_nm || "";
+        const area = (p.area_m2 !== undefined && p.area_m2 !== null) ? p.area_m2 : "";
+        const price = (p.land_price !== undefined && p.land_price !== null) ? p.land_price : "";
+
         layer.bindPopup(
-          `<div style="font-size:12px;">
-            <div><b>PNU</b>: ${p.pnu}</div>
-            <div><b>주소</b>: ${p.address ?? ''}</div>
-            <div><b>지목</b>: ${p.jimok_nm ?? ''}</div>
-            <div><b>면적(㎡)</b>: ${p.area_m2 ?? ''}</div>
-            <div><b>공시지가</b>: ${p.land_price ?? ''}</div>
-          </div>`
+          '<div style="font-size:12px;">' +
+            "<div><b>PNU</b>: " + p.pnu + "</div>" +
+            "<div><b>주소</b>: " + addr + "</div>" +
+            "<div><b>지목</b>: " + jm + "</div>" +
+            "<div><b>면적(㎡)</b>: " + area + "</div>" +
+            "<div><b>공시지가</b>: " + price + "</div>" +
+          "</div>"
         );
       }
     }
@@ -192,10 +198,12 @@
     const max_lon = bounds.getEast();
     const max_lat = bounds.getNorth();
 
-    const url = `${API_BASE_URL}/parcels_bbox` +
-                `?min_lon=${min_lon}&min_lat=${min_lat}` +
-                `&max_lon=${max_lon}&max_lat=${max_lat}` +
-                `&limit=500`;
+    const url = API_BASE_URL + "/parcels_bbox" +
+                "?min_lon=" + min_lon +
+                "&min_lat=" + min_lat +
+                "&max_lon=" + max_lon +
+                "&max_lat=" + max_lat +
+                "&limit=500";
 
     try {
       const res = await fetch(url);
